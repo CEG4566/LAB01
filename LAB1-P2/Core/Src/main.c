@@ -19,9 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
-#include "queue.h"
-#include "task.h"
-#include "cmsis_os2.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -46,33 +43,33 @@
 /* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef huart2;
 
-/* Definitions for Task1 */
-osThreadId_t Task1Handle;
-const osThreadAttr_t Task1_attributes = {
-  .name = "Task1",
+/* Definitions for Green */
+osThreadId_t GreenHandle;
+const osThreadAttr_t Green_attributes = {
+  .name = "Green",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityHigh,
+  .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for Task2 */
-osThreadId_t Task2Handle;
-const osThreadAttr_t Task2_attributes = {
-  .name = "Task2",
+/* Definitions for Orange */
+osThreadId_t OrangeHandle;
+const osThreadAttr_t Orange_attributes = {
+  .name = "Orange",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for Task3 */
-osThreadId_t Task3Handle;
-const osThreadAttr_t Task3_attributes = {
-  .name = "Task3",
+/* Definitions for Red */
+osThreadId_t RedHandle;
+const osThreadAttr_t Red_attributes = {
+  .name = "Red",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for Task4 */
 osThreadId_t Task4Handle;
 const osThreadAttr_t Task4_attributes = {
   .name = "Task4",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for Task5 */
 osThreadId_t Task5Handle;
@@ -81,6 +78,25 @@ const osThreadAttr_t Task5_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for Task6 */
+osThreadId_t Task6Handle;
+const osThreadAttr_t Task6_attributes = {
+  .name = "Task6",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for ButtonPressed */
+osEventFlagsId_t ButtonPressedHandle;
+const osEventFlagsAttr_t ButtonPressed_attributes = {
+  .name = "ButtonPressed"
+};
+/* Definitions for CanButtonPress */
+osEventFlagsId_t CanButtonPressHandle;
+const osEventFlagsAttr_t CanButtonPress_attributes = {
+  .name = "CanButtonPress"
+};
+
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -89,11 +105,12 @@ const osThreadAttr_t Task5_attributes = {
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
-void StartTask1(void *argument);
-void StartTask2(void *argument);
-void StartTask3(void *argument);
-void StartTask4(void *argument);
-void StartTask5(void *argument);
+void GreenLight(void *argument);
+void OrangeLight(void *argument);
+void RedLight(void *argument);
+void GreenPieton(void *argument);
+void RedPieton(void *argument);
+void Button(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -101,15 +118,7 @@ void StartTask5(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-uint8_t dataTask1[] = "Starting task1\r\n";
-uint8_t dataTask2[] = "Starting task2\r\n";
-uint8_t dataTask3[] = "Starting task3\r\n";
-uint8_t dataTask4[] = "Starting task4\r\n";
-
-int flag = 0;
-osSemaphoreId_t buttonSemaphore;
-QueueHandle_t toggleQueue;
-
+volatile int flag = 0;
 
 /* USER CODE END 0 */
 
@@ -148,8 +157,6 @@ int main(void)
 
   /* Init scheduler */
   osKernelInitialize();
-  buttonSemaphore = osSemaphoreNew(1, 1, NULL);
-  toggleQueue = xQueueCreate(1, sizeof(int));
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -168,24 +175,34 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of Task1 */
-  Task1Handle = osThreadNew(StartTask1, NULL, &Task1_attributes);
+  /* creation of Green */
+  GreenHandle = osThreadNew(GreenLight, NULL, &Green_attributes);
 
-  /* creation of Task2 */
-  Task2Handle = osThreadNew(StartTask2, NULL, &Task2_attributes);
+  /* creation of Orange */
+  OrangeHandle = osThreadNew(OrangeLight, NULL, &Orange_attributes);
 
-  /* creation of Task3 */
-  Task3Handle = osThreadNew(StartTask3, NULL, &Task3_attributes);
+  /* creation of Red */
+  RedHandle = osThreadNew(RedLight, NULL, &Red_attributes);
 
   /* creation of Task4 */
-  Task4Handle = osThreadNew(StartTask4, NULL, &Task4_attributes);
+  Task4Handle = osThreadNew(GreenPieton, NULL, &Task4_attributes);
 
   /* creation of Task5 */
-  Task5Handle = osThreadNew(StartTask5, NULL, &Task5_attributes);
+  Task5Handle = osThreadNew(RedPieton, NULL, &Task5_attributes);
+
+  /* creation of Task6 */
+  Task6Handle = osThreadNew(Button, NULL, &Task6_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
+
+  /* Create the event(s) */
+  /* creation of ButtonPressed */
+  ButtonPressedHandle = osEventFlagsNew(&ButtonPressed_attributes);
+
+  /* creation of CanButtonPress */
+  CanButtonPressHandle = osEventFlagsNew(&CanButtonPress_attributes);
 
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
@@ -197,19 +214,12 @@ int main(void)
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-
-
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
-
   }
-
-  vTaskStartScheduler();
-  return 0;
   /* USER CODE END 3 */
 }
 
@@ -230,12 +240,11 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 4;
   RCC_OscInitStruct.PLL.PLLN = 180;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
@@ -316,10 +325,11 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6
-                          |GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5
+                          |GPIO_PIN_6|GPIO_PIN_7, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PC13 */
   GPIO_InitStruct.Pin = GPIO_PIN_13;
@@ -327,13 +337,20 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB3 PB4 PB5 PB6
-                           PB7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5;
+  /*Configure GPIO pins : PB10 PB3 PB4 PB5
+                           PB6 PB7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5
+                          |GPIO_PIN_6|GPIO_PIN_7;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PD2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -343,177 +360,202 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartTask1 */
+/* USER CODE BEGIN Header_GreenLight */
 /**
-  * @brief  Function implementing the Task1 thread.
+  * @brief  Function implementing the Green thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartTask1 */
-
-void StartTask1(void *argument)
+/* USER CODE END Header_GreenLight */
+void GreenLight(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
-
-
-  int toggleMessage;
-  // Access the queue
-  extern QueueHandle_t toggleQueue;
-
   for(;;)
   {
-	  osSemaphoreAcquire(buttonSemaphore, portMAX_DELAY);
-	  HAL_UART_Transmit(&huart2, dataTask1, sizeof(dataTask1), 1000);
-	  // Toggling green light until button is pushed Green - GPIO_PIN_3
-	  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_3);
-	  // Toggling red light for pedestrians Red - GPIO_PIN_6
-	  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_6);
-	  // Toggle back green light if push button received
-	  if(xQueueReceive(toggleQueue, &toggleMessage, portMAX_DELAY) == pdPASS) {
-		  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_3);
-		  osSemaphoreRelease(buttonSemaphore);
-		  break;
-	  }
-
+      if(osEventFlagsWait(ButtonPressedHandle, 0x0001, osFlagsWaitAny, 0) == 0x0001)
+      {
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+    	  osDelay(5000);
+      }
+      else {
+    	  osDelay(12000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET);
+    	  osEventFlagsSet(CanButtonPress, 0x0001);
+          for(int j = 0; j < 100; j++) {
+              if(osEventFlagsWait(ButtonPressedHandle, 0x0001, osFlagsWaitAny, 0) == 0x0001) break;
+              osDelay(100); // Break down 13000 ms delay into smaller parts
+          }
+          HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+          osDelay(3000);
+      }
   }
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartTask2 */
+/* USER CODE BEGIN Header_OrangeLight */
 /**
-* @brief Function implementing the Task2 thread.
+* @brief Function implementing the Orange thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask2 */
-void StartTask2(void *argument)
+/* USER CODE END Header_OrangeLight */
+void OrangeLight(void *argument)
 {
-  /* USER CODE BEGIN StartTask2 */
+  /* USER CODE BEGIN OrangeLight */
   /* Infinite loop */
   for(;;)
   {
-	  osSemaphoreAcquire(buttonSemaphore, portMAX_DELAY);
-	  // Turn on the yellow light for 3s if button is pushed
-	  if (flag) {
-		  HAL_UART_Transmit(&huart2, dataTask2, sizeof(dataTask2), 1000);
-		  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_4);
-		  osDelay(3000);
-		  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_4);
-		  osSemaphoreRelease(buttonSemaphore);
-	  }
-
-
+      if(osEventFlagsWait(ButtonPressedHandle, 0x0001, osFlagsWaitAny, 0) == 0x0001)
+      {
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_SET);
+    	  osDelay(3000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_RESET);
+    	  osDelay(12000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_SET);
+    	  osDelay(2000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_RESET);
+      } else {
+    	  osDelay(10000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_SET);
+    	  osDelay(2000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_RESET);
+          for(int j = 0; j < 100; j++) {
+              if(osEventFlagsWait(ButtonPressedHandle, 0x0001, osFlagsWaitAny, 0) == 0x0001) break;
+              osDelay(100); // Break down 13000 ms delay into smaller parts
+          }
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_SET);
+    	  osDelay(3000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4, GPIO_PIN_RESET);
+      }
   }
-  /* USER CODE END StartTask2 */
+  /* USER CODE END OrangeLight */
 }
 
-/* USER CODE BEGIN Header_StartTask3 */
+/* USER CODE BEGIN Header_RedLight */
 /**
-* @brief Function implementing the Task3 thread.
+* @brief Function implementing the Red thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask3 */
-void StartTask3(void *argument)
+/* USER CODE END Header_RedLight */
+void RedLight(void *argument)
 {
-  /* USER CODE BEGIN StartTask3 */
+  /* USER CODE BEGIN RedLight */
   /* Infinite loop */
   for(;;)
   {
-	  osSemaphoreAcquire(buttonSemaphore, portMAX_DELAY);
-	  if (flag) {
-		  HAL_UART_Transmit(&huart2, dataTask3, sizeof(dataTask3), 1000);
-		  // toggling on the red light for vehicles for 1s
-		  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_5);
-		  osDelay(1000);
+      if(osEventFlagsWait(ButtonPressedHandle, 0x0001, osFlagsWaitAny, 0) == 0x0001)
+      {
+    	  osDelay(3000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+    	  osDelay(2000);
 
-		  // Turn off the red light for pedestrians
-		  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_6);
-		  // Toggle the green light for pedestrians for 10s - GPIO_PIN_7
-		  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_7);
-		  osDelay(10000);
-		  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_7);
-
-		  // Turn on the red light for pedestrians
-		  HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_6);
-		  osDelay(1000);
-		  osSemaphoreRelease(buttonSemaphore);
-	  }
-
-
-
+      } else {
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_SET);
+    	  osDelay(12000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, GPIO_PIN_RESET);
+          for(int j = 0; j < 100; j++) {
+              if(osEventFlagsWait(ButtonPressedHandle, 0x0001, osFlagsWaitAny, 0) == 0x0001) break;
+              osDelay(100); // Break down 13000 ms delay into smaller parts
+          }
+    	  osDelay(3000);
+      }
 
   }
-  /* USER CODE END StartTask3 */
+  /* USER CODE END RedLight */
 }
 
-/* USER CODE BEGIN Header_StartTask4 */
+/* USER CODE BEGIN Header_GreenPieton */
 /**
 * @brief Function implementing the Task4 thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask4 */
-void StartTask4(void *argument)
+/* USER CODE END Header_GreenPieton */
+void GreenPieton(void *argument)
 {
-  /* USER CODE BEGIN StartTask4 */
+  /* USER CODE BEGIN GreenPieton */
   /* Infinite loop */
   for(;;)
   {
-	  	  osSemaphoreAcquire(buttonSemaphore, portMAX_DELAY);
-
-	 	  if(flag)
-	 	  {
-	 		 HAL_UART_Transmit(&huart2, dataTask4, sizeof(dataTask4), 1000);
-	 		 // Toggling yellow light again for 2s simultaneously with the red lights already toggled
-	 		 HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_4);
-	 		 osDelay(2000);
-	 		 // Toggle back red lights and yellow light
-	 		 HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_4);
-	 		 HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_5);
-	 		 HAL_GPIO_TogglePin(GPIOB,GPIO_PIN_6);
-	 		 flag = 0;
-	 		 osSemaphoreRelease(buttonSemaphore);
-	 	  }
-
-
-
+      if(osEventFlagsWait(ButtonPressedHandle, 0x0001, osFlagsWaitAny, 0) == 0x0001)
+      {
+    	  osDelay(4000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+    	  osDelay(10000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+      }
+      else
+      {
+          // If the button is not pressed, keep the LED on
+          HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+          osDelay(100); // Small delay to prevent tight looping
+      }
   }
-  /* USER CODE END StartTask4 */
+  /* USER CODE END GreenPieton */
 }
 
-/* USER CODE BEGIN Header_StartTask5 */
+/* USER CODE BEGIN Header_RedPieton */
 /**
 * @brief Function implementing the Task5 thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask5 */
-void StartTask5(void *argument)
+/* USER CODE END Header_RedPieton */
+void RedPieton(void *argument)
 {
-  /* USER CODE BEGIN StartTask5 */
+  /* USER CODE BEGIN RedPieton */
   /* Infinite loop */
-  // Access the queue
-  extern QueueHandle_t toggleQueue;
-
   for(;;)
   {
-	  uint8_t str1[] = "I am waiting push-button\r\n";
-	  HAL_UART_Transmit(&huart2, str1, sizeof(str1), 1000);
-	  while(HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13)){
-		  flag = 1;
-		  int toggleMessage = 1;
+      if(osEventFlagsWait(ButtonPressedHandle, 0x0001, osFlagsWaitAny, 0) == 0x0001)
+      {
+    	  osDelay(4000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+    	  osDelay(10000);
+    	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+      }
+      else
+      {
+          // If the button is not pressed, keep the LED on
+          HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+          osDelay(100); // Small delay to prevent tight looping
+      }
 
-	 	  xQueueSendToBack(toggleQueue, &toggleMessage, portMAX_DELAY);
-	 	  osSemaphoreRelease(buttonSemaphore);
-	  };
-
-	  uint8_t str2[] = "I got push-button\r\n";
-	  HAL_UART_Transmit(&huart2, str2, sizeof(str2), 1000);
-	  osDelay(500);
   }
-  /* USER CODE END StartTask5 */
+  /* USER CODE END RedPieton */
+}
+
+/* USER CODE BEGIN Header_Button */
+/**
+* @brief Function implementing the Task6 thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_Button */
+void Button(void *argument)
+{
+  /* USER CODE BEGIN Button */
+  /* Infinite loop */
+  for(;;)
+  {
+	  // Button pressed, set the event flag
+	  if(HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET) {
+		  osEventFlagsSet(ButtonPressedHandle, 0x0001);
+
+	      osDelay(50); // Debounce delay
+	      if(HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET) // Check button state again
+	      {
+	        osEventFlagsSet(ButtonPressedHandle, 0x0001); // Set flag if still pressed
+	      }
+	  }
+	  if(osEventFlagsWait(CanButtonPressHandle, 0x0001, osFlagsWaitAny, 0) == 0x0001) {
+		  osDelay(1000);
+	  }
+	  osDelay(10);
+  }
+  /* USER CODE END Button */
 }
 
 /**
